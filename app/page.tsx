@@ -1,101 +1,333 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import { ProcessingStep, TranscriptionResult, GeneratedContent } from "@/types";
+import { Header } from "@/components/header";
+import { ApiKeyDialog } from "@/components/api-key-dialog";
+import { InputSection } from "@/components/input-section";
+import { ProgressSteps } from "@/components/progress-steps";
+import { ResultTabs } from "@/components/result-tabs";
+import { BatchResults, BatchResult } from "@/components/batch-results";
+
+type ViewMode = "single" | "batch";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [viewMode, setViewMode] = useState<ViewMode>("single");
+  const [step, setStep] = useState<ProcessingStep>("idle");
+  const [error, setError] = useState<string>("");
+  const [transcript, setTranscript] = useState<TranscriptionResult | null>(null);
+  const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+  const [episodeTitle, setEpisodeTitle] = useState("");
+  const [episodeUrl, setEpisodeUrl] = useState("");
+  const [episodeDate, setEpisodeDate] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+  // 一括処理用
+  const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+
+  useEffect(() => {
+    const savedOpenai = localStorage.getItem("koe-openai-key") || "";
+    const savedAnthropic = localStorage.getItem("koe-anthropic-key") || "";
+    setOpenaiKey(savedOpenai);
+    setAnthropicKey(savedAnthropic);
+    if (!savedOpenai) {
+      setShowSettings(true);
+    }
+  }, []);
+
+  const saveKeys = useCallback(
+    (openai: string, anthropic: string) => {
+      setOpenaiKey(openai);
+      setAnthropicKey(anthropic);
+      localStorage.setItem("koe-openai-key", openai);
+      localStorage.setItem("koe-anthropic-key", anthropic);
+      setShowSettings(false);
+    },
+    []
+  );
+
+  // --- 単件処理 ---
+  const processFromUrl = useCallback(
+    async (url: string) => {
+      if (!openaiKey) { setShowSettings(true); return; }
+      setViewMode("single");
+      setError("");
+      setTranscript(null);
+      setGenerated(null);
+      setEpisodeUrl(url);
+      try {
+        setStep("extracting");
+        const extractRes = await fetch("/api/extract-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const extractData = await extractRes.json();
+        if (!extractRes.ok) throw new Error(extractData.error);
+        setEpisodeTitle(extractData.title || "");
+        setEpisodeDate(extractData.publishDate || "");
+
+        setStep("transcribing");
+        const transRes = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+          body: JSON.stringify({ filePath: extractData.filePath }),
+        });
+        const transData = await transRes.json();
+        if (!transRes.ok) throw new Error(transData.error);
+        setTranscript(transData);
+
+        if (!anthropicKey) {
+          setGenerated({
+            obsidianNote: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            threadsPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            xPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            noteArticle: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+          });
+          setStep("done");
+          return;
+        }
+
+        setStep("generating");
+        const genRes = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-anthropic-key": anthropicKey },
+          body: JSON.stringify({ transcript: transData.text, title: extractData.title, url, date: extractData.publishDate }),
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok) throw new Error(genData.error);
+        setGenerated(genData);
+        setStep("done");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "エラーが発生しました");
+        setStep("error");
+      }
+    },
+    [openaiKey, anthropicKey]
+  );
+
+  const processFromFile = useCallback(
+    async (file: File) => {
+      if (!openaiKey) { setShowSettings(true); return; }
+      setViewMode("single");
+      setError("");
+      setTranscript(null);
+      setGenerated(null);
+      setEpisodeUrl("");
+      setEpisodeTitle(file.name.replace(/\.[^.]+$/, ""));
+      try {
+        setStep("extracting");
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch("/api/upload-audio", { method: "POST", body: formData });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error);
+
+        setStep("transcribing");
+        const transRes = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+          body: JSON.stringify({ filePath: uploadData.filePath }),
+        });
+        const transData = await transRes.json();
+        if (!transRes.ok) throw new Error(transData.error);
+        setTranscript(transData);
+
+        if (!anthropicKey) {
+          setGenerated({
+            obsidianNote: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            threadsPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            xPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+            noteArticle: "（Anthropic APIキーを設定するとAI生成が利用できます）",
+          });
+          setStep("done");
+          return;
+        }
+
+        setStep("generating");
+        const genRes = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-anthropic-key": anthropicKey },
+          body: JSON.stringify({ transcript: transData.text, title: file.name.replace(/\.[^.]+$/, ""), date: new Date().toISOString().split("T")[0] }),
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok) throw new Error(genData.error);
+        setGenerated(genData);
+        setStep("done");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "エラーが発生しました");
+        setStep("error");
+      }
+    },
+    [openaiKey, anthropicKey]
+  );
+
+  // --- 一括処理 ---
+  const processFromBatch = useCallback(
+    async (urls: string[]) => {
+      if (!openaiKey) { setShowSettings(true); return; }
+      setViewMode("batch");
+      setError("");
+      setBatchResults([]);
+      setStep("transcribing");
+      setBatchProgress({ current: 0, total: urls.length });
+
+      const results: BatchResult[] = [];
+
+      for (let i = 0; i < urls.length; i++) {
+        setBatchProgress({ current: i + 1, total: urls.length });
+
+        try {
+          const res = await fetch("/api/batch-transcribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+            body: JSON.stringify({ url: urls[i] }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            results.push({ title: urls[i], url: urls[i], publishDate: "", text: "", error: data.error });
+          } else {
+            results.push({
+              title: data.title || "タイトル不明",
+              url: urls[i],
+              publishDate: data.publishDate || "",
+              text: data.text || "",
+            });
+          }
+        } catch (err) {
+          results.push({
+            title: urls[i],
+            url: urls[i],
+            publishDate: "",
+            text: "",
+            error: err instanceof Error ? err.message : "処理に失敗しました",
+          });
+        }
+
+        // 途中結果も更新
+        setBatchResults([...results]);
+      }
+
+      setStep("done");
+    },
+    [openaiKey]
+  );
+
+  const reset = useCallback(() => {
+    setStep("idle");
+    setError("");
+    setTranscript(null);
+    setGenerated(null);
+    setEpisodeTitle("");
+    setEpisodeUrl("");
+    setEpisodeDate("");
+    setBatchResults([]);
+    setBatchProgress({ current: 0, total: 0 });
+    setViewMode("single");
+  }, []);
+
+  return (
+    <>
+      <Header onSettingsClick={() => setShowSettings(true)} />
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
+        {step === "idle" && (
+          <div className="text-center mb-10 animate-slide-up">
+            <h1 className="text-3xl font-bold text-foreground mb-3">
+              声の温度を、資産にしよう。
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              音声配信をワンクリックで、知識資産に変える
+            </p>
+          </div>
+        )}
+
+        {(step === "idle" || step === "error") && (
+          <InputSection
+            onSubmitUrl={processFromUrl}
+            onSubmitFile={processFromFile}
+            onSubmitBatch={processFromBatch}
+            error={error}
+          />
+        )}
+
+        {/* 単件処理の進捗 */}
+        {viewMode === "single" && step !== "idle" && step !== "error" && step !== "done" && (
+          <ProgressSteps currentStep={step} title={episodeTitle} />
+        )}
+
+        {/* 一括処理の進捗 */}
+        {viewMode === "batch" && step === "transcribing" && (
+          <div className="animate-slide-up space-y-4">
+            <div className="text-center">
+              <p className="text-lg font-medium mb-2">
+                一括文字起こし中... ({batchProgress.current}/{batchProgress.total})
+              </p>
+              <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-primary h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                {batchProgress.current < batchProgress.total
+                  ? `${batchProgress.current}件目を処理中...`
+                  : "最終処理中..."}
+              </p>
+            </div>
+
+            {/* 途中結果のプレビュー */}
+            {batchResults.length > 0 && (
+              <div className="space-y-1">
+                {batchResults.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/30">
+                    {r.error ? (
+                      <span className="text-destructive">✗</span>
+                    ) : (
+                      <span className="text-green-600">✓</span>
+                    )}
+                    <span className="truncate">{r.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 単件結果 */}
+        {viewMode === "single" && step === "done" && generated && (
+          <ResultTabs
+            generated={generated}
+            transcript={transcript}
+            title={episodeTitle}
+            url={episodeUrl}
+            date={episodeDate}
+            onReset={reset}
+          />
+        )}
+
+        {/* 一括結果 */}
+        {viewMode === "batch" && step === "done" && (
+          <BatchResults results={batchResults} onReset={reset} />
+        )}
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      <ApiKeyDialog
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={saveKeys}
+        initialOpenai={openaiKey}
+        initialAnthropic={anthropicKey}
+      />
+
+      <footer className="text-center py-6 text-sm text-muted-foreground border-t space-y-1">
+        <p>Koe Asset Maker - 声の温度を、資産にしよう。</p>
+        <p className="text-xs">
+          無料サービスのため、しばらくアクセスがないと次の表示に30秒ほどかかることがあります。
+        </p>
       </footer>
-    </div>
+    </>
   );
 }
