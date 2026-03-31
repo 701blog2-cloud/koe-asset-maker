@@ -135,14 +135,25 @@ export function InputSection({ onSubmitUrl, onSubmitFile, onSubmitBatch, error }
             {/* 一括変換タブ */}
             <TabsContent value="batch" className="space-y-4">
               {/* 説明 */}
-              <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
-                <p className="text-sm font-medium text-foreground mb-1">
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/15 space-y-2">
+                <p className="text-sm font-medium text-foreground">
                   過去の配信をまとめて文字起こし
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   stand.fmのチャンネルURLを入れるだけで、過去の全配信が一覧表示されます。
                   好きな回を選んで、まとめてワンクリックで文字起こしできます。
                 </p>
+                <div className="border-t border-primary/10 pt-2 space-y-1">
+                  <p className="text-xs font-medium text-foreground">📝 一括変換でできること</p>
+                  <p className="text-xs text-muted-foreground">✅ 文字起こし（全件）</p>
+                  <p className="text-xs text-muted-foreground">❌ 要約・SNS投稿案・note下書き（→「1件変換」タブで個別に生成できます）</p>
+                </div>
+                <div className="border-t border-primary/10 pt-2 space-y-1">
+                  <p className="text-xs font-medium text-foreground">⏱ 処理時間の目安</p>
+                  <p className="text-xs text-muted-foreground">1件あたり約30〜60秒（音声の長さによって変わります）</p>
+                  <p className="text-xs text-muted-foreground">📌 おすすめは一度に <strong>5〜10件</strong>。まずは少なめから試してみてね。</p>
+                  <p className="text-xs text-muted-foreground">※ 全件選択すると時間がかかります。途中で止まることも。</p>
+                </div>
               </div>
 
               {/* チャンネルURL取得 */}
@@ -271,6 +282,11 @@ export function InputSection({ onSubmitUrl, onSubmitFile, onSubmitBatch, error }
 
             {/* 1件変換タブ */}
             <TabsContent value="url" className="space-y-3">
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/15 space-y-1">
+                <p className="text-xs font-medium text-foreground">✨ 1件変換でできること</p>
+                <p className="text-xs text-muted-foreground">✅ 文字起こし ✅ 要約 ✅ SNS投稿案（Threads・X）✅ note下書き</p>
+                <p className="text-xs text-muted-foreground">⏱ 処理時間の目安：約1〜3分（音声の長さによって変わります）</p>
+              </div>
               <p className="text-sm text-muted-foreground">
                 stand.fmのエピソードURLを貼り付けてください
               </p>
