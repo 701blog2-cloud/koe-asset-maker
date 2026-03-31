@@ -14,9 +14,8 @@ import { KeyRound, ExternalLink, ArrowRight } from "lucide-react";
 interface ApiKeyDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (openai: string, anthropic: string) => void;
+  onSave: (openai: string) => void;
   initialOpenai: string;
-  initialAnthropic: string;
 }
 
 export function ApiKeyDialog({
@@ -24,18 +23,14 @@ export function ApiKeyDialog({
   onClose,
   onSave,
   initialOpenai,
-  initialAnthropic,
 }: ApiKeyDialogProps) {
   const [openai, setOpenai] = useState(initialOpenai);
-  const [anthropic, setAnthropic] = useState(initialAnthropic);
   const [showGuide, setShowGuide] = useState(true);
 
   useEffect(() => {
     setOpenai(initialOpenai);
-    setAnthropic(initialAnthropic);
-    // 既にキーがあればガイドをスキップ
     if (initialOpenai) setShowGuide(false);
-  }, [initialOpenai, initialAnthropic]);
+  }, [initialOpenai]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -47,13 +42,13 @@ export function ApiKeyDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* 初回ガイド */}
         {showGuide && !initialOpenai && (
           <div className="space-y-3 mt-1">
             <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
               <p className="text-sm leading-relaxed">
-                このアプリは、あなたの音声配信を文字起こしするために<strong>Groq</strong>という無料サービスを使います。
-                最初に1回だけAPIキー（アプリ連携用のパスワード）を取得する必要があります。
+                このアプリは、音声の文字起こし・要約・SNS投稿案の生成に
+                <strong>Groq</strong>という無料サービスを使います。
+                最初に1回だけAPIキーを取得するだけでOK！
               </p>
             </div>
 
@@ -62,13 +57,9 @@ export function ApiKeyDialog({
                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">1</span>
                 <div>
                   <p className="text-sm font-medium">Groqのサイトでアカウント作成</p>
-                  <p className="text-xs text-muted-foreground">Googleアカウントで登録するだけ。無料です。</p>
-                  <a
-                    href="https://console.groq.com/keys"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1"
-                  >
+                  <p className="text-xs text-muted-foreground">Googleアカウントで登録するだけ。完全無料です。</p>
+                  <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">
                     Groqを開く <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
@@ -84,30 +75,24 @@ export function ApiKeyDialog({
                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">3</span>
                 <div>
                   <p className="text-sm font-medium">下の入力欄に貼り付けて「保存する」</p>
-                  <p className="text-xs text-muted-foreground">これで準備完了！あとはstand.fmのURLを貼るだけ</p>
+                  <p className="text-xs text-muted-foreground">これだけで文字起こし・要約・SNS投稿案が全部使えます！</p>
                 </div>
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowGuide(false)}
-              className="w-full gap-1"
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowGuide(false)} className="w-full gap-1">
               キー入力画面へ <ArrowRight className="w-3 h-3" />
             </Button>
           </div>
         )}
 
-        {/* キー入力フォーム */}
         {(!showGuide || initialOpenai) && (
           <div className="space-y-4 mt-2">
             <div>
               <label className="text-sm font-medium mb-1.5 block">
                 Groq APIキー
                 <span className="text-muted-foreground font-normal ml-1">
-                  (文字起こし用・無料)
+                  (文字起こし・AI生成・完全無料)
                 </span>
               </label>
               <Input
@@ -116,52 +101,20 @@ export function ApiKeyDialog({
                 value={openai}
                 onChange={(e) => setOpenai(e.target.value)}
               />
-              <a
-                href="https://console.groq.com/keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1"
-              >
+              <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">
                 GroqでAPIキーを無料取得 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            {/* Anthropicキー（既にGroqキーがある場合のみ表示） */}
-            {initialOpenai && (
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  Anthropic APIキー
-                  <span className="text-muted-foreground font-normal ml-1">
-                    (AI要約・SNS投稿案の生成用・任意)
-                  </span>
-                </label>
-                <Input
-                  type="password"
-                  placeholder="sk-ant-..."
-                  value={anthropic}
-                  onChange={(e) => setAnthropic(e.target.value)}
-                />
-                <a
-                  href="https://console.anthropic.com/settings/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1"
-                >
-                  AnthropicでAPIキーを取得 <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            )}
             <Button
-              onClick={() => onSave(openai, anthropic)}
+              onClick={() => onSave(openai)}
               className="w-full bg-primary hover:bg-primary/90"
               disabled={!openai}
             >
               {initialOpenai ? "保存する" : "保存して始める"}
             </Button>
             {!showGuide && !initialOpenai && (
-              <button
-                onClick={() => setShowGuide(true)}
-                className="text-xs text-primary hover:underline w-full text-center"
-              >
+              <button onClick={() => setShowGuide(true)} className="text-xs text-primary hover:underline w-full text-center">
                 取得方法がわからない方はこちら
               </button>
             )}

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildGeneratePrompt } from "@/lib/prompts";
 
 export async function POST(request: NextRequest) {
   try {
     const { transcript, title, url, date } = await request.json();
-    const anthropicKey = request.headers.get("x-anthropic-key");
+    // GroqキーをGroq用ヘッダーまたはAnthropicキーヘッダーから取得（後方互換）
+    const groqKey = request.headers.get("x-openai-key") || request.headers.get("x-anthropic-key");
 
-    if (!anthropicKey) {
+    if (!groqKey) {
       return NextResponse.json(
-        { error: "Anthropic APIキーを設定してください" },
+        { error: "Groq APIキーを設定してください" },
         { status: 400 }
       );
     }
@@ -21,7 +22,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = new Anthropic({ apiKey: anthropicKey });
+    // GroqはOpenAI互換APIを提供
+    const client = new OpenAI({
+      apiKey: groqKey,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
 
     const userPrompt = buildGeneratePrompt({
       title: title || "タイトル不明",
@@ -30,17 +35,18 @@ export async function POST(request: NextRequest) {
       date,
     });
 
-    // Claude APIでコンテンツ生成
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    // Groq LLaMAでコンテンツ生成
+    const completion = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
     });
 
     // レスポンスからJSONを抽出
-    const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    const responseText = completion.choices[0]?.message?.content || "";
 
     // JSONをパース（コードブロック内の場合も対応）
     let parsed;

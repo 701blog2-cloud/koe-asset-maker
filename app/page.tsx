@@ -22,7 +22,6 @@ export default function Home() {
   const [episodeDate, setEpisodeDate] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
-  const [anthropicKey, setAnthropicKey] = useState("");
 
   // 一括処理用
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
@@ -30,20 +29,16 @@ export default function Home() {
 
   useEffect(() => {
     const savedOpenai = localStorage.getItem("koe-openai-key") || "";
-    const savedAnthropic = localStorage.getItem("koe-anthropic-key") || "";
     setOpenaiKey(savedOpenai);
-    setAnthropicKey(savedAnthropic);
     if (!savedOpenai) {
       setShowSettings(true);
     }
   }, []);
 
   const saveKeys = useCallback(
-    (openai: string, anthropic: string) => {
+    (openai: string) => {
       setOpenaiKey(openai);
-      setAnthropicKey(anthropic);
       localStorage.setItem("koe-openai-key", openai);
-      localStorage.setItem("koe-anthropic-key", anthropic);
       setShowSettings(false);
     },
     []
@@ -80,21 +75,10 @@ export default function Home() {
         if (!transRes.ok) throw new Error(transData.error);
         setTranscript(transData);
 
-        if (!anthropicKey) {
-          setGenerated({
-            obsidianNote: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            threadsPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            xPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            noteArticle: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-          });
-          setStep("done");
-          return;
-        }
-
         setStep("generating");
         const genRes = await fetch("/api/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-anthropic-key": anthropicKey },
+          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
           body: JSON.stringify({ transcript: transData.text, title: extractData.title, url, date: extractData.publishDate }),
         });
         const genData = await genRes.json();
@@ -106,7 +90,7 @@ export default function Home() {
         setStep("error");
       }
     },
-    [openaiKey, anthropicKey]
+    [openaiKey]
   );
 
   const processFromFile = useCallback(
@@ -136,21 +120,10 @@ export default function Home() {
         if (!transRes.ok) throw new Error(transData.error);
         setTranscript(transData);
 
-        if (!anthropicKey) {
-          setGenerated({
-            obsidianNote: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            threadsPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            xPost: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-            noteArticle: "（Anthropic APIキーを設定するとAI生成が利用できます）",
-          });
-          setStep("done");
-          return;
-        }
-
         setStep("generating");
         const genRes = await fetch("/api/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-anthropic-key": anthropicKey },
+          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
           body: JSON.stringify({ transcript: transData.text, title: file.name.replace(/\.[^.]+$/, ""), date: new Date().toISOString().split("T")[0] }),
         });
         const genData = await genRes.json();
@@ -162,7 +135,7 @@ export default function Home() {
         setStep("error");
       }
     },
-    [openaiKey, anthropicKey]
+    [openaiKey]
   );
 
   // --- 一括処理 ---
@@ -319,7 +292,6 @@ export default function Home() {
         onClose={() => setShowSettings(false)}
         onSave={saveKeys}
         initialOpenai={openaiKey}
-        initialAnthropic={anthropicKey}
       />
 
       <footer className="text-center py-6 text-sm text-muted-foreground border-t space-y-1">
