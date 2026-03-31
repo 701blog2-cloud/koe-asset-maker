@@ -151,6 +151,21 @@ export function InputSection({ onSubmitUrl, onSubmitFile, onSubmitBatch, error }
                 </div>
               </div>
 
+              {/* ポッドキャスト設定の案内 */}
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-1">
+                <p className="text-xs font-medium text-amber-800">⚠️ 事前確認：ポッドキャスト配信をオンにしていますか？</p>
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  チャンネルの全エピソード一覧を取得するには、stand.fmアプリの
+                  <strong>「ポッドキャスト配信」設定をオン</strong>にする必要があります。
+                </p>
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  📱 設定手順：stand.fmアプリ →「その他」→「チャンネルの設定」→「ポッドキャスト配信」をオン
+                </p>
+                <p className="text-xs text-amber-600">
+                  オフのままでも、個別エピソードのURLを直接貼れば文字起こしできます（下の「または」欄から）
+                </p>
+              </div>
+
               {/* チャンネルURL取得 */}
               <div className="space-y-2">
                 <p className="text-sm font-medium">
