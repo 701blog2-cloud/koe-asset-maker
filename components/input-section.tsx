@@ -62,7 +62,7 @@ export function InputSection({ onSubmitUrl, onSubmitFile, onSubmitBatch, error }
 
   const toggleEpisode = (id: string) => {
     const next = new Set(selectedEpisodes);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) { next.delete(id); } else { next.add(id); }
     setSelectedEpisodes(next);
   };
 
