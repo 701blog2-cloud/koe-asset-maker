@@ -243,24 +243,23 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
                   ) : (
                     <div className="space-y-3">
                       {/* タブ */}
-                      <div className="flex gap-1 flex-wrap">
-                        {tabs.map((tab) => (
-                          <button
-                            key={tab.key}
-                            onClick={() => setTab(i, tab.key)}
-                            disabled={
-                              (tab.key !== "transcript" && tab.key !== "obsidian") &&
-                              !r.generated
-                            }
-                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                              getTab(i) === tab.key
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed"
-                            }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">👇 タブを切り替えて内容を確認できます</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {tabs.map((tab) => (
+                            <button
+                              key={tab.key}
+                              onClick={() => setTab(i, tab.key)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                                getTab(i) === tab.key
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-white text-foreground border-border hover:bg-muted/50"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       {/* タブコンテンツ */}
