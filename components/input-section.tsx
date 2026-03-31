@@ -140,7 +140,7 @@ export function InputSection({ onSubmitUrl, onSubmitFile, onSubmitBatch, error }
                   <p className="text-xs text-amber-700">
                     アプリ →「その他」→「チャンネルの設定」→「ポッドキャスト配信」をオンにするとチャンネルURLで全エピソードを取得できます
                   </p>
-                  <p className="text-xs text-amber-600">オフの場合は↓のURLを直接貼り付けて使えます</p>
+                  <p className="text-xs text-amber-600">オフでも大丈夫！各エピソードのURLを1つずつ貼り付けて使えます（下の入力欄から）</p>
                 </div>
               </div>
 
