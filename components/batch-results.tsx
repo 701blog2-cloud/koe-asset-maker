@@ -18,6 +18,12 @@ export interface BatchResult {
   publishDate: string;
   text: string;
   error?: string;
+  generated?: {
+    obsidianNote: string;
+    threadsPost: string;
+    xPost: string;
+    noteArticle: string;
+  };
 }
 
 interface BatchResultsProps {
@@ -25,7 +31,10 @@ interface BatchResultsProps {
   onReset: () => void;
 }
 
+type TabKey = "transcript" | "threads" | "x" | "note" | "obsidian";
+
 function buildObsidianMd(r: BatchResult): string {
+  if (r.generated?.obsidianNote) return r.generated.obsidianNote;
   return `---
 title: "${r.title}"
 date: ${r.publishDate || new Date().toISOString().split("T")[0]}
@@ -47,22 +56,53 @@ ${r.text}
 `;
 }
 
+function buildCombinedMd(r: BatchResult): string {
+  const base = buildObsidianMd(r);
+  if (!r.generated) return base;
+  return base + `
+## Threads投稿案
+
+${r.generated.threadsPost}
+
+## X(Twitter)投稿案
+
+${r.generated.xPost}
+
+## note記事下書き
+
+${r.generated.noteArticle}
+`;
+}
+
 export function BatchResults({ results, onReset }: BatchResultsProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<Record<number, TabKey>>({});
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const successResults = results.filter((r) => !r.error);
 
-  const handleCopy = async (text: string, index: number) => {
+  const getTab = (i: number): TabKey => activeTab[i] || "transcript";
+  const setTab = (i: number, tab: TabKey) =>
+    setActiveTab((prev) => ({ ...prev, [i]: tab }));
+
+  const handleCopy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const getTabContent = (r: BatchResult, tab: TabKey): string => {
+    switch (tab) {
+      case "transcript": return r.text;
+      case "threads": return r.generated?.threadsPost || "";
+      case "x": return r.generated?.xPost || "";
+      case "note": return r.generated?.noteArticle || "";
+      case "obsidian": return buildObsidianMd(r);
+    }
   };
 
   const handleDownloadCombined = () => {
-    const allMd = successResults
-      .map((r) => buildObsidianMd(r))
-      .join("\n\n---\n\n");
+    const allMd = successResults.map((r) => buildCombinedMd(r)).join("\n\n---\n\n");
     const blob = new Blob([allMd], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -73,38 +113,45 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
   };
 
   const handleDownloadZip = async () => {
-    // 個別の.mdファイルをまとめてダウンロード（簡易実装：連結版）
-    // 各ファイルを個別にダウンロード
     for (const r of successResults) {
-      const md = buildObsidianMd(r);
+      const md = buildCombinedMd(r);
       const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const filename = `${r.publishDate || "note"}_${r.title}`
-        .replace(/[/\\?%*:|"<>]/g, "-")
-        .slice(0, 80) + ".md";
+      const filename =
+        `${r.publishDate || "note"}_${r.title}`
+          .replace(/[/\\?%*:|"<>]/g, "-")
+          .slice(0, 80) + ".md";
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      // ブラウザが複数ダウンロードをブロックしないよう少し待つ
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
   };
 
   const handleDownloadSingle = (r: BatchResult) => {
-    const md = buildObsidianMd(r);
+    const md = buildCombinedMd(r);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const filename = `${r.publishDate || "note"}_${r.title}`
-      .replace(/[/\\?%*:|"<>]/g, "-")
-      .slice(0, 80) + ".md";
+    const filename =
+      `${r.publishDate || "note"}_${r.title}`
+        .replace(/[/\\?%*:|"<>]/g, "-")
+        .slice(0, 80) + ".md";
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "transcript", label: "文字起こし" },
+    { key: "obsidian", label: "Obsidian" },
+    { key: "threads", label: "Threads" },
+    { key: "x", label: "X" },
+    { key: "note", label: "note" },
+  ];
 
   return (
     <div className="animate-slide-up space-y-4">
@@ -128,7 +175,7 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
           全{successResults.length}件をダウンロード（1配信=1ファイル）
         </Button>
         <p className="text-xs text-muted-foreground text-center">
-          Obsidianに入れるならこちら。1配信ごとに.mdファイルで保存されます。
+          Obsidianに入れるならこちら。文字起こし＋AI生成内容をまとめて保存。
         </p>
         <Button
           onClick={handleDownloadCombined}
@@ -143,12 +190,12 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
         </p>
       </div>
 
-
       {/* 結果一覧 */}
       <div className="space-y-2">
         {results.map((r, i) => (
           <Card key={i} className={r.error ? "border-destructive/30" : ""}>
             <CardContent className="p-4">
+              {/* ヘッダー行 */}
               <div
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => setExpandedIndex(expandedIndex === i ? null : i)}
@@ -172,26 +219,13 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
                 </div>
                 <div className="flex items-center gap-1 ml-2">
                   {!r.error && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleCopy(r.text, i); }}
-                      >
-                        {copiedIndex === i ? (
-                          <Check className="w-3.5 h-3.5 text-green-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); handleDownloadSingle(r); }}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </Button>
-                    </>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleDownloadSingle(r); }}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
                   )}
                   {expandedIndex === i ? (
                     <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -201,14 +235,55 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
                 </div>
               </div>
 
+              {/* 展開コンテンツ */}
               {expandedIndex === i && (
                 <div className="mt-3 pt-3 border-t">
                   {r.error ? (
                     <p className="text-sm text-destructive">{r.error}</p>
                   ) : (
-                    <pre className="whitespace-pre-wrap text-sm leading-relaxed p-3 bg-muted/30 rounded-lg max-h-[300px] overflow-y-auto font-[inherit]">
-                      {r.text}
-                    </pre>
+                    <div className="space-y-3">
+                      {/* タブ */}
+                      <div className="flex gap-1 flex-wrap">
+                        {tabs.map((tab) => (
+                          <button
+                            key={tab.key}
+                            onClick={() => setTab(i, tab.key)}
+                            disabled={
+                              (tab.key !== "transcript" && tab.key !== "obsidian") &&
+                              !r.generated
+                            }
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                              getTab(i) === tab.key
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed"
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* タブコンテンツ */}
+                      <div className="relative">
+                        <pre className="whitespace-pre-wrap text-sm leading-relaxed p-3 bg-muted/30 rounded-lg max-h-[300px] overflow-y-auto font-[inherit]">
+                          {getTabContent(r, getTab(i))}
+                        </pre>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-2 right-2 h-7 px-2"
+                          onClick={() =>
+                            handleCopy(getTabContent(r, getTab(i)), `${i}-${getTab(i)}`)
+                          }
+                        >
+                          {copiedKey === `${i}-${getTab(i)}` ? (
+                            <Check className="w-3.5 h-3.5 text-green-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

@@ -154,6 +154,7 @@ export default function Home() {
         setBatchProgress({ current: i + 1, total: urls.length });
 
         try {
+          // Step1: 文字起こし
           const res = await fetch("/api/batch-transcribe", {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
@@ -163,11 +164,25 @@ export default function Home() {
           if (!res.ok) {
             results.push({ title: urls[i], url: urls[i], publishDate: "", text: "", error: data.error });
           } else {
+            // Step2: AI生成（要約・SNS・note）
+            let generated;
+            try {
+              const genRes = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+                body: JSON.stringify({ transcript: data.text, title: data.title, url: urls[i], date: data.publishDate }),
+              });
+              const genData = await genRes.json();
+              if (genRes.ok) generated = genData;
+            } catch {
+              // AI生成に失敗しても文字起こしだけで続行
+            }
             results.push({
               title: data.title || "タイトル不明",
               url: urls[i],
               publishDate: data.publishDate || "",
               text: data.text || "",
+              generated,
             });
           }
         } catch (err) {
