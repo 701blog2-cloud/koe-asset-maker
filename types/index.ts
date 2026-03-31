@@ -17,16 +17,4 @@ export interface TranscriptionResult {
   segments?: TranscriptSegment[];
 }
 
-export interface GeneratedContent {
-  obsidianNote: string;
-  threadsPost: string;
-  xPost: string;
-  noteArticle: string;
-}
-
-export type ProcessingStep = "idle" | "extracting" | "transcribing" | "generating" | "done" | "error";
-
-export interface ApiKeys {
-  openaiKey: string;
-  anthropicKey: string;
-}
+export type ProcessingStep = "idle" | "extracting" | "transcribing" | "done" | "error";

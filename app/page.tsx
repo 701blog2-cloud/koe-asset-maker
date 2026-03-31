@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { ProcessingStep, TranscriptionResult, GeneratedContent } from "@/types";
+import { ProcessingStep, TranscriptionResult } from "@/types";
 import { Header } from "@/components/header";
 import { ApiKeyDialog } from "@/components/api-key-dialog";
 import { InputSection } from "@/components/input-section";
@@ -16,199 +16,138 @@ export default function Home() {
   const [step, setStep] = useState<ProcessingStep>("idle");
   const [error, setError] = useState<string>("");
   const [transcript, setTranscript] = useState<TranscriptionResult | null>(null);
-  const [generated, setGenerated] = useState<GeneratedContent | null>(null);
   const [episodeTitle, setEpisodeTitle] = useState("");
   const [episodeUrl, setEpisodeUrl] = useState("");
   const [episodeDate, setEpisodeDate] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
 
-  // 一括処理用
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     const savedOpenai = localStorage.getItem("koe-openai-key") || "";
     setOpenaiKey(savedOpenai);
-    if (!savedOpenai) {
-      setShowSettings(true);
-    }
+    if (!savedOpenai) setShowSettings(true);
   }, []);
 
-  const saveKeys = useCallback(
-    (openai: string) => {
-      setOpenaiKey(openai);
-      localStorage.setItem("koe-openai-key", openai);
-      setShowSettings(false);
-    },
-    []
-  );
+  const saveKeys = useCallback((openai: string) => {
+    setOpenaiKey(openai);
+    localStorage.setItem("koe-openai-key", openai);
+    setShowSettings(false);
+  }, []);
 
   // --- 単件処理 ---
-  const processFromUrl = useCallback(
-    async (url: string) => {
-      if (!openaiKey) { setShowSettings(true); return; }
-      setViewMode("single");
-      setError("");
-      setTranscript(null);
-      setGenerated(null);
-      setEpisodeUrl(url);
-      try {
-        setStep("extracting");
-        const extractRes = await fetch("/api/extract-audio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        const extractData = await extractRes.json();
-        if (!extractRes.ok) throw new Error(extractData.error);
-        setEpisodeTitle(extractData.title || "");
-        setEpisodeDate(extractData.publishDate || "");
+  const processFromUrl = useCallback(async (url: string) => {
+    if (!openaiKey) { setShowSettings(true); return; }
+    setViewMode("single");
+    setError("");
+    setTranscript(null);
+    setEpisodeUrl(url);
+    try {
+      setStep("extracting");
+      const extractRes = await fetch("/api/extract-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const extractData = await extractRes.json();
+      if (!extractRes.ok) throw new Error(extractData.error);
+      setEpisodeTitle(extractData.title || "");
+      setEpisodeDate(extractData.publishDate || "");
 
-        setStep("transcribing");
-        const transRes = await fetch("/api/transcribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-          body: JSON.stringify({ filePath: extractData.filePath }),
-        });
-        const transData = await transRes.json();
-        if (!transRes.ok) throw new Error(transData.error);
-        setTranscript(transData);
+      setStep("transcribing");
+      const transRes = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+        body: JSON.stringify({ filePath: extractData.filePath }),
+      });
+      const transData = await transRes.json();
+      if (!transRes.ok) throw new Error(transData.error);
+      setTranscript(transData);
+      setStep("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました");
+      setStep("error");
+    }
+  }, [openaiKey]);
 
-        setStep("generating");
-        const genRes = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-          body: JSON.stringify({ transcript: transData.text, title: extractData.title, url, date: extractData.publishDate }),
-        });
-        const genData = await genRes.json();
-        if (!genRes.ok) throw new Error(genData.error);
-        setGenerated(genData);
-        setStep("done");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "エラーが発生しました");
-        setStep("error");
-      }
-    },
-    [openaiKey]
-  );
+  const processFromFile = useCallback(async (file: File) => {
+    if (!openaiKey) { setShowSettings(true); return; }
+    setViewMode("single");
+    setError("");
+    setTranscript(null);
+    setEpisodeUrl("");
+    setEpisodeTitle(file.name.replace(/\.[^.]+$/, ""));
+    try {
+      setStep("extracting");
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/upload-audio", { method: "POST", body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error);
 
-  const processFromFile = useCallback(
-    async (file: File) => {
-      if (!openaiKey) { setShowSettings(true); return; }
-      setViewMode("single");
-      setError("");
-      setTranscript(null);
-      setGenerated(null);
-      setEpisodeUrl("");
-      setEpisodeTitle(file.name.replace(/\.[^.]+$/, ""));
-      try {
-        setStep("extracting");
-        const formData = new FormData();
-        formData.append("file", file);
-        const uploadRes = await fetch("/api/upload-audio", { method: "POST", body: formData });
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error);
-
-        setStep("transcribing");
-        const transRes = await fetch("/api/transcribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-          body: JSON.stringify({ filePath: uploadData.filePath }),
-        });
-        const transData = await transRes.json();
-        if (!transRes.ok) throw new Error(transData.error);
-        setTranscript(transData);
-
-        setStep("generating");
-        const genRes = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-          body: JSON.stringify({ transcript: transData.text, title: file.name.replace(/\.[^.]+$/, ""), date: new Date().toISOString().split("T")[0] }),
-        });
-        const genData = await genRes.json();
-        if (!genRes.ok) throw new Error(genData.error);
-        setGenerated(genData);
-        setStep("done");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "エラーが発生しました");
-        setStep("error");
-      }
-    },
-    [openaiKey]
-  );
+      setStep("transcribing");
+      const transRes = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+        body: JSON.stringify({ filePath: uploadData.filePath }),
+      });
+      const transData = await transRes.json();
+      if (!transRes.ok) throw new Error(transData.error);
+      setTranscript(transData);
+      setStep("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました");
+      setStep("error");
+    }
+  }, [openaiKey]);
 
   // --- 一括処理 ---
-  const processFromBatch = useCallback(
-    async (urls: string[]) => {
-      if (!openaiKey) { setShowSettings(true); return; }
-      setViewMode("batch");
-      setError("");
-      setBatchResults([]);
-      setStep("transcribing");
-      setBatchProgress({ current: 0, total: urls.length });
+  const processFromBatch = useCallback(async (urls: string[]) => {
+    if (!openaiKey) { setShowSettings(true); return; }
+    setViewMode("batch");
+    setError("");
+    setBatchResults([]);
+    setStep("transcribing");
+    setBatchProgress({ current: 0, total: urls.length });
 
-      const results: BatchResult[] = [];
+    const results: BatchResult[] = [];
 
-      for (let i = 0; i < urls.length; i++) {
-        setBatchProgress({ current: i + 1, total: urls.length });
-
-        try {
-          // Step1: 文字起こし
-          const res = await fetch("/api/batch-transcribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-            body: JSON.stringify({ url: urls[i] }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            results.push({ title: urls[i], url: urls[i], publishDate: "", text: "", error: data.error });
-          } else {
-            // Step2: AI生成（要約・SNS・note）
-            let generated;
-            try {
-              const genRes = await fetch("/api/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
-                body: JSON.stringify({ transcript: data.text, title: data.title, url: urls[i], date: data.publishDate }),
-              });
-              const genData = await genRes.json();
-              if (genRes.ok) generated = genData;
-            } catch {
-              // AI生成に失敗しても文字起こしだけで続行
-            }
-            results.push({
-              title: data.title || "タイトル不明",
-              url: urls[i],
-              publishDate: data.publishDate || "",
-              text: data.text || "",
-              generated,
-            });
-          }
-        } catch (err) {
+    for (let i = 0; i < urls.length; i++) {
+      setBatchProgress({ current: i + 1, total: urls.length });
+      try {
+        const res = await fetch("/api/batch-transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-openai-key": openaiKey },
+          body: JSON.stringify({ url: urls[i] }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          results.push({ title: urls[i], url: urls[i], publishDate: "", text: "", error: data.error });
+        } else {
           results.push({
-            title: urls[i],
+            title: data.title || "タイトル不明",
             url: urls[i],
-            publishDate: "",
-            text: "",
-            error: err instanceof Error ? err.message : "処理に失敗しました",
+            publishDate: data.publishDate || "",
+            text: data.text || "",
           });
         }
-
-        // 途中結果も更新
-        setBatchResults([...results]);
+      } catch (err) {
+        results.push({
+          title: urls[i], url: urls[i], publishDate: "", text: "",
+          error: err instanceof Error ? err.message : "処理に失敗しました",
+        });
       }
-
-      setStep("done");
-    },
-    [openaiKey]
-  );
+      setBatchResults([...results]);
+    }
+    setStep("done");
+  }, [openaiKey]);
 
   const reset = useCallback(() => {
     setStep("idle");
     setError("");
     setTranscript(null);
-    setGenerated(null);
     setEpisodeTitle("");
     setEpisodeUrl("");
     setEpisodeDate("");
@@ -227,7 +166,7 @@ export default function Home() {
               声の温度を、資産にしよう。
             </h1>
             <p className="text-muted-foreground text-lg">
-              音声配信をワンクリックで、知識資産に変える
+              音声配信のURLを貼るだけで、文字起こしを自動化
             </p>
           </div>
         )}
@@ -241,12 +180,10 @@ export default function Home() {
           />
         )}
 
-        {/* 単件処理の進捗 */}
         {viewMode === "single" && step !== "idle" && step !== "error" && step !== "done" && (
           <ProgressSteps currentStep={step} title={episodeTitle} />
         )}
 
-        {/* 一括処理の進捗 */}
         {viewMode === "batch" && step === "transcribing" && (
           <div className="animate-slide-up space-y-4">
             <div className="text-center">
@@ -265,17 +202,11 @@ export default function Home() {
                   : "最終処理中..."}
               </p>
             </div>
-
-            {/* 途中結果のプレビュー */}
             {batchResults.length > 0 && (
               <div className="space-y-1">
                 {batchResults.map((r, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/30">
-                    {r.error ? (
-                      <span className="text-destructive">✗</span>
-                    ) : (
-                      <span className="text-green-600">✓</span>
-                    )}
+                    {r.error ? <span className="text-destructive">✗</span> : <span className="text-green-600">✓</span>}
                     <span className="truncate">{r.title}</span>
                   </div>
                 ))}
@@ -284,10 +215,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* 単件結果 */}
-        {viewMode === "single" && step === "done" && generated && (
+        {viewMode === "single" && step === "done" && transcript && (
           <ResultTabs
-            generated={generated}
             transcript={transcript}
             title={episodeTitle}
             url={episodeUrl}
@@ -296,7 +225,6 @@ export default function Home() {
           />
         )}
 
-        {/* 一括結果 */}
         {viewMode === "batch" && step === "done" && (
           <BatchResults results={batchResults} onReset={reset} />
         )}

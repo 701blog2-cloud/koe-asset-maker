@@ -3,14 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Download,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  RotateCcw,
-} from "lucide-react";
+import { Download, Copy, Check, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 
 export interface BatchResult {
   title: string;
@@ -18,12 +11,6 @@ export interface BatchResult {
   publishDate: string;
   text: string;
   error?: string;
-  generated?: {
-    obsidianNote: string;
-    threadsPost: string;
-    xPost: string;
-    noteArticle: string;
-  };
 }
 
 interface BatchResultsProps {
@@ -31,10 +18,9 @@ interface BatchResultsProps {
   onReset: () => void;
 }
 
-type TabKey = "transcript" | "threads" | "x" | "note" | "obsidian";
+type TabKey = "transcript" | "obsidian";
 
 function buildObsidianMd(r: BatchResult): string {
-  if (r.generated?.obsidianNote) return r.generated.obsidianNote;
   return `---
 title: "${r.title}"
 date: ${r.publishDate || new Date().toISOString().split("T")[0]}
@@ -56,31 +42,12 @@ ${r.text}
 `;
 }
 
-function buildCombinedMd(r: BatchResult): string {
-  const base = buildObsidianMd(r);
-  if (!r.generated) return base;
-  return base + `
-## Threads投稿案
-
-${r.generated.threadsPost}
-
-## X(Twitter)投稿案
-
-${r.generated.xPost}
-
-## note記事下書き
-
-${r.generated.noteArticle}
-`;
-}
-
 export function BatchResults({ results, onReset }: BatchResultsProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<Record<number, TabKey>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const successResults = results.filter((r) => !r.error);
-
   const getTab = (i: number): TabKey => activeTab[i] || "transcript";
   const setTab = (i: number, tab: TabKey) =>
     setActiveTab((prev) => ({ ...prev, [i]: tab }));
@@ -91,18 +58,27 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const getTabContent = (r: BatchResult, tab: TabKey): string => {
-    switch (tab) {
-      case "transcript": return r.text;
-      case "threads": return r.generated?.threadsPost || "";
-      case "x": return r.generated?.xPost || "";
-      case "note": return r.generated?.noteArticle || "";
-      case "obsidian": return buildObsidianMd(r);
+  const getTabContent = (r: BatchResult, tab: TabKey): string =>
+    tab === "obsidian" ? buildObsidianMd(r) : r.text;
+
+  const handleDownloadAll = async () => {
+    for (const r of successResults) {
+      const md = buildObsidianMd(r);
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const filename = `${r.publishDate || "note"}_${r.title}`
+        .replace(/[/\\?%*:|"<>]/g, "-").slice(0, 80) + ".md";
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
   };
 
   const handleDownloadCombined = () => {
-    const allMd = successResults.map((r) => buildCombinedMd(r)).join("\n\n---\n\n");
+    const allMd = successResults.map((r) => buildObsidianMd(r)).join("\n\n---\n\n");
     const blob = new Blob([allMd], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -112,33 +88,13 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadZip = async () => {
-    for (const r of successResults) {
-      const md = buildCombinedMd(r);
-      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const filename =
-        `${r.publishDate || "note"}_${r.title}`
-          .replace(/[/\\?%*:|"<>]/g, "-")
-          .slice(0, 80) + ".md";
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  };
-
   const handleDownloadSingle = (r: BatchResult) => {
-    const md = buildCombinedMd(r);
+    const md = buildObsidianMd(r);
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const filename =
-      `${r.publishDate || "note"}_${r.title}`
-        .replace(/[/\\?%*:|"<>]/g, "-")
-        .slice(0, 80) + ".md";
+    const filename = `${r.publishDate || "note"}_${r.title}`
+      .replace(/[/\\?%*:|"<>]/g, "-").slice(0, 80) + ".md";
     a.href = url;
     a.download = filename;
     a.click();
@@ -147,10 +103,7 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "transcript", label: "文字起こし" },
-    { key: "obsidian", label: "Obsidian" },
-    { key: "threads", label: "Threads" },
-    { key: "x", label: "X" },
-    { key: "note", label: "note" },
+    { key: "obsidian", label: "Obsidian用" },
   ];
 
   return (
@@ -160,28 +113,19 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
           一括変換完了! ({successResults.length}/{results.length}件)
         </h2>
         <Button variant="ghost" size="sm" onClick={onReset} className="gap-1.5">
-          <RotateCcw className="w-4 h-4" />
-          新しく変換
+          <RotateCcw className="w-4 h-4" />新しく変換
         </Button>
       </div>
 
-      {/* ダウンロードボタン */}
       <div className="space-y-2">
-        <Button
-          onClick={handleDownloadZip}
-          className="w-full bg-primary hover:bg-primary/90 gap-1.5"
-        >
+        <Button onClick={handleDownloadAll} className="w-full bg-primary hover:bg-primary/90 gap-1.5">
           <Download className="w-4 h-4" />
           全{successResults.length}件をダウンロード（1配信=1ファイル）
         </Button>
         <p className="text-xs text-muted-foreground text-center">
-          Obsidianに入れるならこちら。文字起こし＋AI生成内容をまとめて保存。
+          Obsidianに入れるならこちら。1配信ごとに.mdファイルで保存されます。
         </p>
-        <Button
-          onClick={handleDownloadCombined}
-          variant="outline"
-          className="w-full gap-1.5"
-        >
+        <Button onClick={handleDownloadCombined} variant="outline" className="w-full gap-1.5">
           <Download className="w-4 h-4" />
           全{successResults.length}件を1つのファイルにまとめてダウンロード
         </Button>
@@ -190,12 +134,10 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
         </p>
       </div>
 
-      {/* 結果一覧 */}
       <div className="space-y-2">
         {results.map((r, i) => (
           <Card key={i} className={r.error ? "border-destructive/30" : ""}>
             <CardContent className="p-4">
-              {/* ヘッダー行 */}
               <div
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => setExpandedIndex(expandedIndex === i ? null : i)}
@@ -203,13 +145,9 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     {r.error ? (
-                      <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded">
-                        エラー
-                      </span>
+                      <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded">エラー</span>
                     ) : (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                        完了
-                      </span>
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">完了</span>
                     )}
                     <p className="text-sm font-medium truncate">{r.title}</p>
                   </div>
@@ -219,67 +157,45 @@ export function BatchResults({ results, onReset }: BatchResultsProps) {
                 </div>
                 <div className="flex items-center gap-1 ml-2">
                   {!r.error && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); handleDownloadSingle(r); }}
-                    >
+                    <Button variant="ghost" size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleDownloadSingle(r); }}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
                   )}
-                  {expandedIndex === i ? (
-                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  )}
+                  {expandedIndex === i
+                    ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                    : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                 </div>
               </div>
 
-              {/* 展開コンテンツ */}
               {expandedIndex === i && (
                 <div className="mt-3 pt-3 border-t">
                   {r.error ? (
                     <p className="text-sm text-destructive">{r.error}</p>
                   ) : (
                     <div className="space-y-3">
-                      {/* タブ */}
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">👇 タブを切り替えて内容を確認できます</p>
-                        <div className="flex gap-1 flex-wrap">
-                          {tabs.map((tab) => (
-                            <button
-                              key={tab.key}
-                              onClick={() => setTab(i, tab.key)}
-                              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-                                getTab(i) === tab.key
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-white text-foreground border-border hover:bg-muted/50"
-                              }`}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex gap-1">
+                        {tabs.map((tab) => (
+                          <button key={tab.key} onClick={() => setTab(i, tab.key)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                              getTab(i) === tab.key
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-white text-foreground border-border hover:bg-muted/50"
+                            }`}>
+                            {tab.label}
+                          </button>
+                        ))}
                       </div>
-
-                      {/* タブコンテンツ */}
                       <div className="relative">
                         <pre className="whitespace-pre-wrap text-sm leading-relaxed p-3 bg-muted/30 rounded-lg max-h-[300px] overflow-y-auto font-[inherit]">
                           {getTabContent(r, getTab(i))}
                         </pre>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <Button variant="ghost" size="sm"
                           className="absolute top-2 right-2 h-7 px-2"
-                          onClick={() =>
-                            handleCopy(getTabContent(r, getTab(i)), `${i}-${getTab(i)}`)
-                          }
-                        >
-                          {copiedKey === `${i}-${getTab(i)}` ? (
-                            <Check className="w-3.5 h-3.5 text-green-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
+                          onClick={() => handleCopy(getTabContent(r, getTab(i)), `${i}-${getTab(i)}`)}>
+                          {copiedKey === `${i}-${getTab(i)}`
+                            ? <Check className="w-3.5 h-3.5 text-green-600" />
+                            : <Copy className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
                     </div>
