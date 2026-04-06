@@ -53,9 +53,23 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
 
     // URLのエピソードIDで該当エントリを検索、なければ最初のエントリを使用
     const episodeKeys = Object.keys(episodes);
-    const targetEpisodeKey = episodeId && episodes[episodeId]
-      ? episodeId
-      : episodeKeys[0];
+    console.log("[standfm] episodeId from URL:", episodeId);
+    console.log("[standfm] episode keys in SERVER_STATE:", episodeKeys);
+
+    // キー直接一致 → id/episodeId フィールド検索 → フォールバックの順で探す
+    let targetEpisodeKey: string | undefined;
+    if (episodeId && episodes[episodeId]) {
+      targetEpisodeKey = episodeId;
+    } else if (episodeId) {
+      // キーがIDと一致しない場合、各エントリのid/episodeIdフィールドで検索
+      targetEpisodeKey = episodeKeys.find((k) => {
+        const ep = episodes[k] as Record<string, unknown>;
+        return ep.id === episodeId || ep.episodeId === episodeId || ep.slug === episodeId;
+      }) ?? episodeKeys[0];
+    } else {
+      targetEpisodeKey = episodeKeys[0];
+    }
+    console.log("[standfm] targetEpisodeKey:", targetEpisodeKey);
 
     if (targetEpisodeKey) {
       const ep = episodes[targetEpisodeKey] as Record<string, unknown>;
@@ -74,9 +88,20 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
     let audioUrl = "";
     let duration: number | undefined;
     const topicKeys = Object.keys(topics);
-    const targetTopicKey = episodeId && topics[episodeId]
-      ? episodeId
-      : topicKeys[0];
+    console.log("[standfm] topic keys in SERVER_STATE:", topicKeys);
+
+    let targetTopicKey: string | undefined;
+    if (episodeId && topics[episodeId]) {
+      targetTopicKey = episodeId;
+    } else if (episodeId) {
+      targetTopicKey = topicKeys.find((k) => {
+        const t = topics[k] as Record<string, unknown>;
+        return t.id === episodeId || t.episodeId === episodeId || t.slug === episodeId;
+      }) ?? topicKeys[0];
+    } else {
+      targetTopicKey = topicKeys[0];
+    }
+    console.log("[standfm] targetTopicKey:", targetTopicKey);
 
     if (targetTopicKey) {
       const topic = topics[targetTopicKey] as Record<string, unknown>;
