@@ -35,6 +35,10 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
     return extractFromOgTags(html, url);
   }
 
+  // URLからエピソードIDを抽出
+  const episodeIdMatch = url.match(/\/episodes\/([\w-]+)/);
+  const episodeId = episodeIdMatch ? episodeIdMatch[1] : null;
+
   try {
     const serverState = JSON.parse(stateMatch[1]);
 
@@ -47,9 +51,14 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
     let publishDate: string | undefined;
     let description: string | undefined;
 
+    // URLのエピソードIDで該当エントリを検索、なければ最初のエントリを使用
     const episodeKeys = Object.keys(episodes);
-    if (episodeKeys.length > 0) {
-      const ep = episodes[episodeKeys[0]] as Record<string, unknown>;
+    const targetEpisodeKey = episodeId && episodes[episodeId]
+      ? episodeId
+      : episodeKeys[0];
+
+    if (targetEpisodeKey) {
+      const ep = episodes[targetEpisodeKey] as Record<string, unknown>;
       title = (ep.title as string) || title;
       if (ep.createdAt) {
         const ts = Number(ep.createdAt);
@@ -61,12 +70,16 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
       description = (ep.description as string) || undefined;
     }
 
-    // topicsからaudio URLを取得
+    // topicsからaudio URLを取得（URLのエピソードIDで該当エントリを検索）
     let audioUrl = "";
     let duration: number | undefined;
     const topicKeys = Object.keys(topics);
-    if (topicKeys.length > 0) {
-      const topic = topics[topicKeys[0]] as Record<string, unknown>;
+    const targetTopicKey = episodeId && topics[episodeId]
+      ? episodeId
+      : topicKeys[0];
+
+    if (targetTopicKey) {
+      const topic = topics[targetTopicKey] as Record<string, unknown>;
       audioUrl =
         (topic.downloadUrl as string) ||
         (topic.audioUrl as string) ||
@@ -78,8 +91,8 @@ export async function extractStandfmEpisode(url: string): Promise<EpisodeInfo> {
     }
 
     // episodesにaudioUrlがある場合のフォールバック
-    if (!audioUrl && episodeKeys.length > 0) {
-      const ep = episodes[episodeKeys[0]] as Record<string, unknown>;
+    if (!audioUrl && targetEpisodeKey) {
+      const ep = episodes[targetEpisodeKey] as Record<string, unknown>;
       audioUrl =
         (ep.downloadUrl as string) ||
         (ep.audioUrl as string) ||
