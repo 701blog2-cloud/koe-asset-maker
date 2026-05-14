@@ -1,4 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { withCors, corsPreflight } from "@/lib/cors";
+
+export async function OPTIONS() {
+  return corsPreflight();
+}
 
 /**
  * stand.fmのチャンネルURLからエピソード一覧を取得
@@ -9,13 +14,13 @@ export async function POST(request: NextRequest) {
     const { url } = await request.json();
 
     if (!url) {
-      return NextResponse.json({ error: "URLが必要です" }, { status: 400 });
+      return withCors({ error: "URLが必要です" }, { status: 400 });
     }
 
     // チャンネルIDを抽出
     const channelMatch = url.match(/stand\.fm\/channels\/([\w-]+)/);
     if (!channelMatch) {
-      return NextResponse.json(
+      return withCors(
         { error: "stand.fmのチャンネルURLを入力してください\n例: https://stand.fm/channels/xxxxx" },
         { status: 400 }
       );
@@ -26,7 +31,7 @@ export async function POST(request: NextRequest) {
     // まずRSSフィードを試す（全件取れる）
     const rssResult = await fetchFromRss(channelId);
     if (rssResult.length > 0) {
-      return NextResponse.json({
+      return withCors({
         episodes: rssResult,
         total: rssResult.length,
         source: "rss",
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // RSSが無効な場合、HTMLからフォールバック
     const htmlResult = await fetchFromHtml(url, channelId);
-    return NextResponse.json({
+    return withCors({
       episodes: htmlResult.episodes,
       total: htmlResult.episodes.length,
       source: "html",
@@ -46,7 +51,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "エピソード一覧の取得に失敗しました";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return withCors({ error: message }, { status: 500 });
   }
 }
 

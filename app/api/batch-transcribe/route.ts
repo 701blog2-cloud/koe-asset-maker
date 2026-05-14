@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { extractStandfmEpisode, downloadAudio } from "@/lib/standfm-extractor";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
+import { withCors, corsPreflight } from "@/lib/cors";
+
+export async function OPTIONS() {
+  return corsPreflight();
+}
 
 /**
  * 1つのエピソードを処理（音声取得→文字起こし）
@@ -15,14 +20,14 @@ export async function POST(request: NextRequest) {
     const apiKey = request.headers.get("x-openai-key");
 
     if (!apiKey) {
-      return NextResponse.json(
+      return withCors(
         { error: "APIキーを設定してください" },
         { status: 400 }
       );
     }
 
     if (!url) {
-      return NextResponse.json({ error: "URLが必要です" }, { status: 400 });
+      return withCors({ error: "URLが必要です" }, { status: 400 });
     }
 
     // 1. 音声情報を抽出
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const transcription = await transResponse.json();
 
-    return NextResponse.json({
+    return withCors({
       title: episode.title,
       url,
       publishDate: episode.publishDate || "",
@@ -90,6 +95,6 @@ export async function POST(request: NextRequest) {
     console.error("Batch transcribe error:", error);
     const message =
       error instanceof Error ? error.message : "処理に失敗しました";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return withCors({ error: message }, { status: 500 });
   }
 }
